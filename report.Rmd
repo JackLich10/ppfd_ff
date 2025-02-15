@@ -27,14 +27,6 @@ Much of the data is pulled from the `nflreadR` package, but additional web-scrap
 
 We attempt two different model specifications as well as an ensemble between the two in an effort to predict weekly receiving point-per-first-down scoring. A side effect of our predictive modeling is still a relatively interpretable framework of fantasy football scoring.
 
-Project goals are clearly stated, with relevant
-issues and challenges clearly identified
-• Project analysis, results, and conclusions fully
-address the above goals. Strengths and limitations
-of the analysis & data should be clearly presented.
-• Project importance and relevance clearly
-communicated, esp. to a person not in the field.
-
 
 ## Data
 
@@ -91,22 +83,6 @@ Variables with the `exp_` prefix denote variables that utilize `nflfastR`'s unde
 - `no_play`: Binary indicator denoting if a player accumulated stats in `next_game_id`
 - `next_PPFD_pts`: Point per first down receiving fantasy points in `next_game_id` (target variable)
 
-• Data sources are clearly outlined & fully
-described. If needed, a clear procedure is given on
-how to get from raw data to usable data.
-• All variables (predictors and response) clearly
-identified and described for the study. Any relevant
-properties of these variables (e.g., for modeling,
-interpretation) should be fully discussed.
-• The conclusions obtained from the proposed data
-can fully address project goals. If not, potential
-limitations in the data should be fully discussed.
-• Multiple data sources are used to address project
-goals in a comprehensive and nuanced way.
-• Handling of missing data (if present) is discussed
-• Exploratory data analysis (EDA) should support
-project goals and help guide model selection
-
 
 ## Feature Engineering
 
@@ -152,7 +128,30 @@ The goal of this project is to predict next game fantasy point production as wel
 
 Due to the multi-collinearity within our predictors, a lasso regression model specification may be ideal for this problem. A lasso model will have the added benefit of shrinking coefficients to reduce variance while potentially selecting out inactive variables. From our exploratory analysis however, we know that many of our predictors have non-linear relationships with our response. Thus, we will utilize a generalized additive model framework as well, incorporating natural splines.
 
-We also know that while we have multi-collinearity, it is very likely that the interactions between our predictors are significant. Thus, a tree-based model is particularly appealing. XGBoost is a gradient boosting decision tree framework known for being fast and robust to highly heterogeneous data. XGBoost's ability to learn the various player-level feature relationships with its non-linear decision boundaries will likely be extremely valuable.
+\begin{align*}
+\operatorname{next\_PPFD\_pts} &= \beta_{0} + \hat{\beta}_{1}(\operatorname{diff\_PPFD\_pts}) + \hat{\beta}_{2}(\operatorname{diff\_yards})\ + \\
+&\quad \hat{\beta}_{3}(\operatorname{\exp\_PPFD\_pts}) + \hat{\beta}_{4}(\operatorname{PPFD\_pts}) + f_{5}(\operatorname{exp\_first\_downs})\ + \\
+&\quad f_{6}(\operatorname{exp\_touchdowns}) + f_{7}(\operatorname{exp\_yards}) + f_{8}(\operatorname{rank})\ + \\
+&\quad f_{9}(\operatorname{yards}) + f_{10}(\operatorname{next\_career\_game}) + \hat{\beta}_{11}(\operatorname{\exp\_catches})\ + \\
+&\quad f_{12}(\operatorname{spread\_line}) + f_{13}(\operatorname{offense\_snaps}) + f_{14}(\operatorname{offense\_pct})\ + \\
+&\quad \hat{\beta}_{15}(\operatorname{target\_share}) + \hat{\beta}_{16}(\operatorname{air\_yards\_share})\ + \\
+&\quad \hat{\beta}_{17}(\operatorname{wpor}) + \hat{\beta}_{18}(\operatorname{\exp\_racr})\ + \\
+&\quad \hat{\beta}_{19}(\operatorname{team\_implied\_total}) + \\
+&\quad\hat{\beta}_{20}(\operatorname{PPFD\_allowed\_pred}) + \hat{\beta}_{21}(\operatorname{PPFD\_allowed\_target\_pred})\ + \\
+&\quad \hat{\beta}_{22}(\operatorname{pass\_oe\_pred}) + \hat{\beta}_{23}(\operatorname{change\_team})\ + \hat{\beta}_{24}(\operatorname{consec\_missed}) + \epsilon
+\end{align*}
+
+where $f_x$ is a function determined via natural splines. For parameter estimation, we apply shrinkage through the L1 norm, hoping to take advantage of the bias-variance trade-off in terms of decreasing variance while incurring the cost of some increase in bias.
+
+We also know that while we have multi-collinearity, it is very likely that the interactions between our predictors are significant. Thus, a tree-based model is particularly appealing. XGBoost is a gradient boosting decision tree framework known for being fast and robust to highly heterogeneous data. XGBoost's ability to learn the various player-level feature relationships with its non-linear decision boundaries will likely be extremely valuable. XGBoost is one implementation of gradient boosted decision trees. Boosting is an ensemble technique where new models are added to correct the errors made by existing models. Models are added sequentially until no further improvements can be made. Gradient boosting is an approach where new models are created that predict the residuals or errors of prior models and then added together to make the final prediction. It is called gradient boosting because it uses a gradient descent algorithm to minimize the loss when adding new models. The general XGBoost algorithm starts with a training set, a differentiable loss function $L(y, F(x))$, a number of weak learners $M$ and a learning rate $\alpha$. Then,
+
+- Initialize model with a constant value:
+$${\displaystyle {\hat {f}}_{(0)}(x)={\underset {\theta }{\arg \min }}\sum _{i=1}^{N}L(y_{i},\theta ).}$$
+
+- For $m=1$ to $M$, fit a base learner (tree) using the training set by solving the optimization problem that is an extension of gradient boosting with additional features such as penalization through both LASSO (L1) and Ridge (L2) regularization to prevent overfitting as well as other [features](https://towardsdatascience.com/https-medium-com-vishalmorde-xgboost-algorithm-long-she-may-rein-edd9f99be63d). Then, update the model as ${\displaystyle {\hat {f}}_{(m)}(x)={\hat {f}}_{(m-1)}(x)+{\hat {f}}_{m}(x)}$
+
+- Output ${\displaystyle {\hat {f}}(x)={\hat {f}}_{(M)}(x)=\sum _{m=0}^{M}{\hat {f}}_{m}(x)}$
+
 
 We use 5-fold cross validation to tune both the shrunken generalized additive model and the XGBoost model, selecting hyperparameters based on root mean squared error. NOTE: we train each of these model specifications using the raw response as well as using a logged response. Through cross validation, we find that predictions are more accurate by RMSE on the raw response than on the logged response. As such, we only generate out-of-sample predictions using the raw response framework.
 
@@ -162,29 +161,7 @@ Out-of-sample model prediction diagnostics are shown below:
 ![Model diagnostics](plots/model_diagnostics.png)
 </center>
 
-While each model looks to over-predict performance at the tails, this is largely an extremely low sample. For example, while XGBoost does the worst at the right tail, only 41 total out-of-sample predictions are above 17.5 predicted points, out of over 40,000. Thus, each model is fairly well calibrated in the heart of the distribution.
-
-• Thoughtful, nuanced, and logical justification of
-model specification
-• Modeling choice factors in both nature of the data
-as well as project goals
-• Model assumptions and goodness-of-fit checked
-via model diagnostics
-• Modeling approach clearly described and
-discussed (in equations and in writing)
-• Final full/selected model is written out explicitly
-and discussed in the context of the problem 
-
-Conclusions & findings fully supported by
-statistical analysis and data
-• Conclusions & findings fully address the study
-objectives in a thoughtful & nuanced way
-• Statistical analyses are translated into meaningful
-and understandable findings for the target
-audience (e.g., managers, engineers)
-• Any limitations of approach are discussed, or
-conclusions reached are warranted by the
-modeling approach
+While each model looks to over-predict performance at the tails, this is an extremely low sample of predictions. For example, while XGBoost does the worst at the right tail, only 41 total out-of-sample predictions are above 17.5 predicted points, out of over 40,000. Thus, each model is fairly well calibrated in the heart of the distribution.
 
 
 ## Results
